@@ -55,6 +55,7 @@ logger:
 messageQueue:
   type: nats-streaming
 
+<<<<<<< HEAD
 ## Message queue trigger config
 ### NATS Streaming
 nats:
@@ -66,6 +67,8 @@ azureStorageQueue:
   key: ""
   accountName: ""
 
+=======
+>>>>>>> f67af9f... Implement Kafka support based on work of @puneetguptanitj
 ## Persist data to a persistent volume.
 persistence:
   enabled: true
@@ -94,3 +97,15 @@ pruneInterval: 60
 
 ## Fission pre-install/pre-upgrade checks live in this image
 preUpgradeChecksImage: fission/pre-upgrade-checks
+
+## Message queue trigger config
+
+messagequeues:
+  ### NATS Streaming
+  nats:
+    enabled: true
+    authToken: "defaultFissionAuthToken"
+    clusterID: "fissionMQTrigger"
+  kafka:
+    enabled: false
+    brokers: kafka:9092

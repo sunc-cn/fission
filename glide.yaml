@@ -68,3 +68,7 @@ import:
 - package: github.com/prometheus/client_golang
   version: v0.8.0
 - package: github.com/dustin/go-humanize
+- package: github.com/bsm/sarama-cluster
+  version: ^2.1.11
+- package: github.com/Shopify/sarama
+  version: ^1.15.0
