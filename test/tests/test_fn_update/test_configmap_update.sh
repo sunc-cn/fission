@@ -54,5 +54,8 @@ trap "fission spec destroy" EXIT
 log "Waiting for changes to take effect"
 sleep 5
 
+log "dumping function pod logs"
+dump_function_pod_logs $FISSION_NAMESPACE $FUNCTION_NAMESPACE
+
 log "Testing function for cfgmap value"
 timeout 60 bash -c "test_fn $fn_name 'TESTVALUE_NEW'"

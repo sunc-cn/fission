@@ -53,7 +53,10 @@ log "Updating function with updated package"
 fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
 
 log "Waiting for deployment to update"
-sleep 5
+sleep 10
+
+log "dumping function pod logs"
+dump_function_pod_logs $FISSION_NAMESPACE $FUNCTION_NAMESPACE
 
 timeout 60 bash -c "test_fn $fn_name 'fission'"
 

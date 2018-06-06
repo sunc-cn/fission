@@ -20,3 +20,23 @@ test_fn() {
     done
 }
 export -f test_fn
+
+dump_function_pod_logs() {
+    ns=$1
+    fns=$2
+
+    functionPods=$(kubectl -n $fns get pod -o name -l functionName)
+    for p in $functionPods
+    do
+	echo "--- function pod logs $p ---"
+	containers=$(kubectl -n $fns get $p -o jsonpath={.spec.containers[*].name} --ignore-not-found)
+	for c in $containers
+	do
+	    echo "--- function pod logs $p: container $c ---"
+	    kubectl -n $fns logs $p $c || true
+	    echo "--- end function pod logs $p: container $c ---"
+	done
+	echo "--- end function pod logs $p ---"
+    done
+}
+export -f dump_function_pod_logs
