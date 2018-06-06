@@ -7,11 +7,12 @@
 set -euo pipefail
 
 test_fn() {
-    echo "Doing an HTTP GET on the function's route"
-    echo "Checking for valid response"
+    echo `date +%Y/%m/%d:%H:%M:%S` "Doing an HTTP GET on the function's route"
+    echo `date +%Y/%m/%d:%H:%M:%S` "Checking for valid response"
 
     while true; do
       response0=$(curl http://$FISSION_ROUTER/$1)
+      echo `date +%Y/%m/%d:%H:%M:%S` "Dumping response : $response0"
       echo $response0 | grep -i $2
       if [[ $? -eq 0 ]]; then
         break

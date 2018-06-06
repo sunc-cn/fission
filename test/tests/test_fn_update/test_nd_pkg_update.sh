@@ -47,6 +47,8 @@ timeout 60 bash -c "test_fn $fn_name 'world'"
 
 log "Updating the archive"
 sed -i 's/world/fission/' test_dir/hello.py
+log "Cat test_dir/hello.py before zipping"
+cat test_dir/hello.py
 zip -jr test-deploy-pkg.zip test_dir/
 
 log "Updating function with updated package"
@@ -58,6 +60,6 @@ sleep 10
 log "dumping function pod logs"
 dump_function_pod_logs $FISSION_NAMESPACE $FUNCTION_NAMESPACE
 
-timeout 60 bash -c "test_fn $fn_name 'fission'"
+timeout 4 bash -c "test_fn $fn_name 'fission'"
 
 log "Update function for new deployment executor passed"
