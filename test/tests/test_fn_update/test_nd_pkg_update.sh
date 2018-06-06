@@ -47,18 +47,27 @@ timeout 60 bash -c "test_fn $fn_name 'world'"
 
 log "Updating the archive"
 sed -i 's/world/fission/' test_dir/hello.py
-log "Cat test_dir/hello.py before zipping"
+log "cat test_dir/hello.py before zipping"
 cat test_dir/hello.py
-zip -jr test-deploy-pkg.zip test_dir/
+zip -jr test-deploy-pkg-2.zip test_dir/
 
 log "Updating function with updated package"
-fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
+fission fn update --name $fn_name --deploy test-deploy-pkg-2.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
 
 log "Waiting for deployment to update"
-sleep 10
+sleep 15
 
 log "dumping function pod logs"
 dump_function_pod_logs $FISSION_NAMESPACE $FUNCTION_NAMESPACE
+
+response=$(curl http://$FISSION_ROUTER/$fn_name)
+log "dumping response inside the test : $response"
+
+response_internal=$(curl http://$FISSION_ROUTER/$FUNCTION_NAMESPACE/$fn_name)
+log "dumping response inside the test : $response_internal"
+
+log "kubectl get pods in $FUNCTION_NAMESPACE"
+kubectl get pods -n $FUNCTION_NAMESPACE
 
 timeout 4 bash -c "test_fn $fn_name 'fission'"
 

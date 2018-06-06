@@ -104,7 +104,8 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 	for i := 0; i < roundTripper.maxRetries-1; i++ {
 		if needExecutor {
-			log.Printf("Calling getServiceForFunction for function: %s", roundTripper.funcHandler.function.Name)
+			log.Printf("Calling getServiceForFunction for function: %s, fn resourceversion : %s", roundTripper.funcHandler.function.Name,
+				roundTripper.funcHandler.function.ResourceVersion)
 
 			// send a request to executor to specialize a new pod
 			service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
@@ -120,6 +121,9 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			if err != nil {
 				return nil, err
 			}
+
+			log.Printf("Service url returned for function: %s, fn resourceversion : %s = %s", roundTripper.funcHandler.function.Name,
+				roundTripper.funcHandler.function.ResourceVersion, service)
 
 			// add the address in router's cache
 			roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
@@ -154,6 +158,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		overhead := time.Since(startTime)
 
 		// forward the request to the function service
+		log.Printf("Printing req url host just before roundTrip : %s", req.Host)
 		resp, err = transport.RoundTrip(req)
 		if err == nil {
 			// Track metrics
