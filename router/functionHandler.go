@@ -169,6 +169,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			}
 
 			// return response back to user
+			log.Printf("Dumping req: %v response: %v", *req, *resp)
 			return resp, nil
 		}
 
