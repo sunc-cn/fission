@@ -52,7 +52,7 @@ fission spec apply ./specs/
 trap "fission spec destroy" EXIT
 
 log "Waiting for changes to take effect"
-sleep 5
+sleep 150
 
 log "Testing function for secret value"
 timeout 60 bash -c "test_fn $fn_name 'TESTVALUE_NEW'"

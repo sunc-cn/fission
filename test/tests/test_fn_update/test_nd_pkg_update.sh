@@ -52,8 +52,8 @@ zip -jr test-deploy-pkg.zip test_dir/
 log "Updating function with updated package"
 fission fn update --name $fn_name --deploy test-deploy-pkg.zip --entrypoint "hello.main" --executortype newdeploy --minscale 1 --maxscale 4 --targetcpu 50
 
-log "Waiting for deployment to update"
-sleep 5
+log "Waiting for deployment to update and pod to get recycled"
+sleep 150
 
 timeout 60 bash -c "test_fn $fn_name 'fission'"
 
