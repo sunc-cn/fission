@@ -31,6 +31,7 @@ const (
 	DELETE
 	EXPIRE
 	COPY
+	FORCESET
 )
 
 type (
@@ -122,6 +123,15 @@ func (c *Cache) service() {
 				}
 			}
 			req.responseChannel <- resp
+		case FORCESET:
+			now := time.Now()
+			c.cache[req.key] = &Value{
+				value: req.value,
+				ctime: now,
+				atime: now,
+			}
+			resp.value = req.value
+			req.responseChannel <- resp
 		case DELETE:
 			delete(c.cache, req.key)
 			req.responseChannel <- resp
@@ -169,6 +179,19 @@ func (c *Cache) Set(key interface{}, value interface{}) (error, interface{}) {
 	}
 	resp := <-respChannel
 	return resp.error, resp.existingValue
+}
+
+// if key exists in the cache, ForceSet sets the key to the new value
+func (c *Cache) ForceSet(key interface{}, value interface{}) (error, interface{}) {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     FORCESET,
+		key:             key,
+		value:           value,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return nil, resp.value
 }
 
 func (c *Cache) Delete(key interface{}) error {

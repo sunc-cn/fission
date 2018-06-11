@@ -51,6 +51,9 @@ type (
 	MessageQueueType             = fv1.MessageQueueType
 	MessageQueueTriggerSpec      = fv1.MessageQueueTriggerSpec
 	TimeTriggerSpec              = fv1.TimeTriggerSpec
+	CanaryConfigSpec 			 = fv1.CanaryConfigSpec
+	TriggerReference			 = fv1.TriggerReference
+	FailureType					 = fv1.FailureType
 )
 
 type (
@@ -145,10 +148,13 @@ const (
 	// reference is simply by function name.
 	FunctionReferenceTypeFunctionName = fv1.FunctionReferenceTypeFunctionName
 
+	//   Set of function references (recursively), by percentage of traffic
+	FunctionReferenceTypeFunctionWeights = fv1.FunctionReferenceTypeFunctionWeights
+
 	// Other function reference types we'd like to support:
 	//   Versioned function, latest version
 	//   Versioned function. by semver "latest compatible"
-	//   Set of function references (recursively), by percentage of traffic
+
 )
 
 const (
@@ -192,4 +198,8 @@ const (
 	PackageGetterRB = "package-getter-binding"
 
 	ClusterRole = "ClusterRole"
+)
+
+const (
+	FailureTypeStatusCode = fv1.FailureTypeStatusCode
 )

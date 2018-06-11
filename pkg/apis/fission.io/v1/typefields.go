@@ -185,6 +185,10 @@ type (
 
 		// Name of the function.
 		Name string `json:"name"`
+
+		// Function Reference by weight. this map contains function name as key and its weight
+		// as the value.
+		FunctionWeights map[string]int `json:"functionweights"`
 	}
 
 	//
@@ -316,5 +320,26 @@ type (
 	TimeTriggerSpec struct {
 		Cron              string `json:"cron"`
 		FunctionReference `json:"functionref"`
+	}
+
+
+	FailureType string
+
+	// Canary Config
+	CanaryConfigSpec struct {
+		Trigger TriggerReference `json:"triggerref"`
+		FunctionN string `json:"funcn"`
+		FunctionNminus1 string `json:"funcn-1"`
+		WeightIncrement int `json:"weightincrement"`
+		WeightIncrementDuration string `json:"duration"`
+		FailureThreshold int `json:"failurethreshold"`
+		FailureType FailureType `json:"failureType"`
+	}
+
+	// trigger reference
+	TriggerReference struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+		//ResourceVersion string `json:"resourceversion,omitempty"`
 	}
 )
