@@ -73,6 +73,8 @@ const (
 	// reference is simply by function name.
 	FunctionReferenceTypeFunctionName = "name"
 
+	FunctionReferenceTypeFunctionWeights = "function-weights"
+
 	// Other function reference types we'd like to support:
 	//   Versioned function, latest version
 	//   Versioned function. by semver "latest compatible"

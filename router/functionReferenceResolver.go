@@ -45,12 +45,18 @@ type (
 
 	resolveResultType int
 
+	functionMetadata struct{
+		metadata *metav1.ObjectMeta
+		weight int64
+	}
+
 	// resolveResult is the result of resolving a function reference; for now
 	// it's just the metadata of one function, but in the future could support
 	// a distribution of requests across two functions.
 	resolveResult struct {
 		resolveResultType
-		functionMetadata *metav1.ObjectMeta
+		//functionMetadata *metav1.ObjectMeta
+		functionMap map[string]functionMetadata
 	}
 
 	// namespacedFunctionReference is just a function reference plus a
@@ -64,6 +70,7 @@ type (
 
 const (
 	resolveResultSingleFunction = iota
+	resolveResultMultipleFunctions
 )
 
 func makeFunctionReferenceResolver(store k8sCache.Store) *functionReferenceResolver {
@@ -116,6 +123,11 @@ func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.Func
 		if err != nil {
 			return nil, err
 		}
+	case fission.FunctionReferenceTypeFunctionWeights:
+		rr, err = frr.resolveByFunctionWeights(namespace, fr)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("Unrecognized function reference type %v", fr.Type)
 	}
@@ -143,9 +155,49 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	}
 
 	f := obj.(*crd.Function)
+	functionMap := make(map[string]functionMetadata, 0)
+	functionMap[f.Metadata.Name] = functionMetadata{
+		metadata: &f.Metadata,
+	}
+
 	rr := resolveResult{
 		resolveResultType: resolveResultSingleFunction,
-		functionMetadata:  &f.Metadata,
+		functionMap:  functionMap,
+	}
+
+	return &rr, nil
+}
+
+func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string, fr *fission.FunctionReference) (*resolveResult, error) {
+
+	functionMap := make(map[string]functionMetadata, 0)
+
+	for functionName, functionWeight := range fr.FunctionWeights {
+		// get function from cache
+		obj, isExist, err := frr.store.Get(&crd.Function{
+			Metadata: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      functionName,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !isExist {
+			return nil, fmt.Errorf("function %v does not exist", functionName)
+		}
+
+		f := obj.(*crd.Function)
+		functionMap[f.Metadata.Name] = functionMetadata{
+			metadata: &f.Metadata,
+			weight: functionWeight,
+		}
+
+	}
+
+	rr := resolveResult{
+		resolveResultType: resolveResultMultipleFunctions,
+		functionMap:  functionMap,
 	}
 	return &rr, nil
 }

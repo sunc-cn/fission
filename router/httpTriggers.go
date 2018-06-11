@@ -114,14 +114,14 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			continue
 		}
 
-		if rr.resolveResultType != resolveResultSingleFunction {
+		if rr.resolveResultType != resolveResultSingleFunction && rr.resolveResultType != resolveResultMultipleFunctions {
 			// not implemented yet
 			log.Panicf("resolve result type not implemented (%v)", rr.resolveResultType)
 		}
 
 		fh := &functionHandler{
 			fmap:        ts.functionServiceMap,
-			function:    rr.functionMetadata,
+			function:    rr.functionMap,
 			executor:    ts.executor,
 			httpTrigger: &trigger,
 		}
@@ -208,6 +208,7 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				fn := newObj.(*crd.Function)
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
+					// TODO : Also delete function references for resolveByMultipleFunctions
 					if key.functionReference.Name == fn.Metadata.Name &&
 						rr.functionMetadata.ResourceVersion != fn.Metadata.ResourceVersion {
 						err := ts.resolver.delete(key.namespace, &key.functionReference)

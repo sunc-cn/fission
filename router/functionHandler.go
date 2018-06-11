@@ -36,7 +36,7 @@ import (
 type functionHandler struct {
 	fmap        *functionServiceMap
 	executor    *executorClient.Client
-	function    *metav1.ObjectMeta
+	function    map[string]functionMetadata
 	httpTrigger *crd.HTTPTrigger
 }
 
@@ -214,6 +214,13 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	vars := mux.Vars(request)
 	for k, v := range vars {
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
+	}
+
+	if len(fh.function) == 1 {
+		// regular function deployment
+	} else {
+		// canary deployment. need to determine the function to send request to now
+		// fh.loadBalance.LoadBalance(fh.httpTrigger, fh.functionMap)
 	}
 
 	// system params

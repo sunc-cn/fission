@@ -185,6 +185,9 @@ type (
 
 		// Name of the function.
 		Name string `json:"name"`
+
+		// Function Reference by weight
+		FunctionWeights map[string]int64 `json:"function-weights"`
 	}
 
 	//

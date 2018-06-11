@@ -22,6 +22,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"encoding/json"
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
@@ -73,10 +74,34 @@ func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNames
 func htCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
-	fnName := c.String("function")
-	if len(fnName) == 0 {
+	var functionRef fission.FunctionReference
+	functionList := c.StringSlice("function")
+	functionWeightsList := c.Int64Slice("weight")
+
+	fmt.Printf("fn array : %v", functionList)
+	fmt.Printf("weight array : %v", functionWeightsList)
+
+	if len(functionList) == 0 {
 		fatal("Need a function name to create a trigger, use --function")
 	}
+
+	if len(functionList) == 1 {
+		functionRef = fission.FunctionReference {
+			Type: fission.FunctionReferenceTypeFunctionName,
+			Name: functionList[0],
+		}
+	} else {
+		functionWeights := make(map[string]int64, 0)
+		for index := range functionList {
+			functionWeights[functionList[index]] = functionWeightsList[index]
+		}
+
+		functionRef = fission.FunctionReference {
+			Type: fission.FunctionReferenceTypeFunctionWeights,
+			FunctionWeights : functionWeights,
+		}
+	}
+
 	fnNamespace := c.String("fnNamespace")
 
 	triggerUrl := c.String("url")
@@ -92,7 +117,8 @@ func htCreate(c *cli.Context) error {
 		method = "GET"
 	}
 
-	checkFunctionExistence(client, fnName, fnNamespace)
+	// TODO : Change this to accept a slice of functionNames
+	//checkFunctionExistence(client, fnName, fnNamespace)
 	createIngress := false
 	if c.IsSet("createingress") {
 		createIngress = c.Bool("createingress")
@@ -112,13 +138,13 @@ func htCreate(c *cli.Context) error {
 			Host:        host,
 			RelativeURL: triggerUrl,
 			Method:      getMethod(method),
-			FunctionReference: fission.FunctionReference{
-				Type: fission.FunctionReferenceTypeFunctionName,
-				Name: fnName,
-			},
+			FunctionReference: functionRef,
 			CreateIngress: createIngress,
 		},
 	}
+
+	//res2B, _ := json.Marshal(ht)
+	//fmt.Println(string(res2B))
 
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {
