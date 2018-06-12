@@ -36,8 +36,10 @@ import (
 type functionHandler struct {
 	fmap        *functionServiceMap
 	executor    *executorClient.Client
-	function    map[string]functionMetadata
+	functionMap    map[string]functionMetadata
+	function *metav1.ObjectMeta
 	httpTrigger *crd.HTTPTrigger
+	loadBalancer *LoadBalancer
 }
 
 // A layer on top of http.DefaultTransport, with retries.
@@ -216,11 +218,19 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
-	if len(fh.function) == 1 {
+	if len(fh.functionMap) == 1 {
 		// regular function deployment
+		for _, fn := range fh.functionMap {
+			fh.function = fn.metadata
+		}
 	} else {
 		// canary deployment. need to determine the function to send request to now
-		// fh.loadBalance.LoadBalance(fh.httpTrigger, fh.functionMap)
+		fnMetadata, err := fh.loadBalancer.getFnBackend(fh.httpTrigger, fh.functionMap)
+		if err != nil {
+			log.Printf("Error getting function backend : %v", err)
+			return
+		}
+		fh.function = fnMetadata
 	}
 
 	// system params

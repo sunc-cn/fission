@@ -49,6 +49,7 @@ type HTTPTriggerSet struct {
 	functions         []crd.Function
 	funcStore         k8sCache.Store
 	funcController    k8sCache.Controller
+	loadBalancer 	  *LoadBalancer
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
@@ -60,6 +61,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 		kubeClient:         kubeClient,
 		executor:           executor,
 		crdClient:          crdClient,
+		loadBalancer: 		makeLoadBalancer(),
 	}
 	var tStore, fnStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -121,7 +123,8 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 
 		fh := &functionHandler{
 			fmap:        ts.functionServiceMap,
-			function:    rr.functionMap,
+			loadBalancer: ts.loadBalancer
+			functionMap:    rr.functionMap,
 			executor:    ts.executor,
 			httpTrigger: &trigger,
 		}
@@ -209,6 +212,7 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
 					// TODO : Also delete function references for resolveByMultipleFunctions
+					// change this.
 					if key.functionReference.Name == fn.Metadata.Name &&
 						rr.functionMetadata.ResourceVersion != fn.Metadata.ResourceVersion {
 						err := ts.resolver.delete(key.namespace, &key.functionReference)

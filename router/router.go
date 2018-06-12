@@ -97,6 +97,7 @@ func Start(port int, executorUrl string) {
 	restClient := fissionClient.GetCrdClient()
 
 	executor := executorClient.MakeClient(executorUrl)
+
 	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, kubeClient, executor, restClient)
 	resolver := makeFunctionReferenceResolver(fnStore)
 

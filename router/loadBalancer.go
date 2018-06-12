@@ -1,44 +1,86 @@
-package main
+package router
 
-import "fmt"
+import (
+	"fmt"
 
-type Server struct {
-	id string
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/crd"
+)
+
+type FunctionBackend struct {
+	name string
 	weight int64
 	currentWeight int64
 }
 
 type LoadBalancer struct {
-	Servers map[string]*Server
+	TriggerFunctionRefMap map[string][]*FunctionBackend // trigger -> functions along with their weights
 }
 
-func(lb *LoadBalancer) addServer(server *Server) {
-	lb.Servers[server.id] = server
+func makeLoadBalancer() *LoadBalancer {
+	loadBalancer := &LoadBalancer{
+		TriggerFunctionRefMap: make(map[string][]*FunctionBackend,0),
+	}
+	return loadBalancer
 }
 
-func(lb *LoadBalancer) getServer() *Server{
-	var bestPeer *Server
+func getCacheKey(triggerName string, triggerNamespace string, triggerResourceVersion string) string {
+	return fmt.Sprintf("%v-%v-%v", triggerName, triggerNamespace, triggerResourceVersion)
+}
 
-	for _, v := range lb.Servers {
+func(lb *LoadBalancer) addFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
+	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
+	lb.TriggerFunctionRefMap[key] = functions
+}
 
-		v.currentWeight += v.weight
+func(lb *LoadBalancer) getFunctionBackends(trigger *crd.HTTPTrigger) []*FunctionBackend {
+	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
+	return lb.TriggerFunctionRefMap[key]
+}
 
-		if bestPeer == nil || bestPeer.currentWeight < v.currentWeight {
-			bestPeer = v
-			fmt.Printf("bestPeer: %s\n", v.id)
+func(lb *LoadBalancer) deleteFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
+	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
+	lb.TriggerFunctionRefMap[key] = nil
+}
+
+func(lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
+	var fnBackends []*FunctionBackend
+
+	// it's the first time the trigger is being added to cache or trigger has been updated or router restarted.
+	fnBackends = lb.getFunctionBackends(trigger)
+	if len(fnBackends) == 0 {
+		fnBackends = make([]*FunctionBackend, 0)
+		for _, v := range functionMap {
+			fnBackend := &FunctionBackend{
+				name: v.metadata.Name,
+				weight: v.weight,
+				currentWeight: v.weight,
+			}
+			fnBackends = append(fnBackends, fnBackend)
 		}
-
+		lb.addFunctionBackends(trigger, fnBackends)
 	}
 
-	if bestPeer != nil {
-		bestPeer.currentWeight -= 100
+	var bestBackend *FunctionBackend
+	for _, backend := range fnBackends {
+
+		backend.currentWeight += backend.weight
+
+		if bestBackend == nil || bestBackend.currentWeight < backend.currentWeight {
+			bestBackend = backend
+			fmt.Printf("bestBackend: %s\n", backend.name)
+		}
 	}
 
-	lb.DumpServers()
+	if bestBackend != nil {
+		bestBackend.currentWeight -= 100
+	}
 
-	return bestPeer
+	return functionMap[bestBackend.name].metadata, nil
 }
 
+/*
 func(lb *LoadBalancer) DumpServers() {
 	fmt.Printf("Printing server info\n")
 
@@ -50,40 +92,4 @@ func(lb *LoadBalancer) DumpServers() {
 
 	fmt.Printf("***********************************\n")
 }
-
-func main() {
-
-	a := &Server{
-		id: "a",
-		weight: 80,
-		currentWeight: 80,
-	}
-
-	b := &Server{
-		id: "b",
-		weight: 10,
-		currentWeight: 10,
-	}
-
-	c := &Server{
-		id: "c",
-		weight: 10,
-		currentWeight: 10,
-	}
-
-	lb := &LoadBalancer{
-		Servers: make(map[string]*Server, 3),
-	}
-
-	lb.addServer(a)
-	lb.addServer(b)
-	lb.addServer(c)
-
-	for i := 0 ; i < 10; i++ {
-		fmt.Printf("Request %d\n", i)
-		server := lb.getServer()
-		fmt.Printf("Result Server : %v\n", *server)
-		fmt.Printf("***************************************\n\n")
-	}
-
-}
+*/
