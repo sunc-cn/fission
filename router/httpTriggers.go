@@ -106,7 +106,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	for _, trigger := range ts.triggers {
 
 		// resolve function reference
-		rr, err := ts.resolver.resolve(trigger.Metadata.Namespace, &trigger.Spec.FunctionReference)
+		rr, err := ts.resolver.resolve(trigger.Metadata.Namespace, &trigger.Spec.FunctionReference, trigger.Metadata.Name)
 		if err != nil {
 			// Unresolvable function reference. Report the error via
 			// the trigger's status.
@@ -134,6 +134,8 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 				fh.function = fn.metadata
 			}
 		}
+
+		//log.Printf("Setting up url %s handler %+v", trigger.Spec.RelativeURL, *fh)
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
 		ht.Methods(trigger.Spec.Method)
@@ -209,6 +211,7 @@ func needResolverCacheInvalidation(key namespacedFunctionReference, rr resolveRe
 		return true
 	}
 
+	log.Printf("needResolverCacheInvalidation decides to not invalidate the cache")
 	return false
 }
 
@@ -237,6 +240,7 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 						rr.functionMap[fn.Metadata.Name].metadata.ResourceVersion != fn.Metadata.ResourceVersion ||
 						needResolverCacheInvalidation(key, rr, &fn.Metadata) {
 						// invalidate resolver cache
+						log.Printf("Invalidating resolver cache")
 						err := ts.resolver.delete(key.namespace, key.refType, key.functionName, key.canaryLabel)
 						if err != nil {
 							log.Printf("Error deleting functionReferenceResolver cache: %v", err)

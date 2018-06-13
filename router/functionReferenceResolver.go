@@ -107,12 +107,12 @@ func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controll
 // function ref types may resolve to two functions rather than just one
 // (e.g. for incremental deployment), which will make the resolveResult a bit
 // more complex.
-func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.FunctionReference) (*resolveResult, error) {
+func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.FunctionReference, triggerName string) (*resolveResult, error) {
 	nfr := namespacedFunctionReference{
 		namespace:    namespace,
 		refType:      fr.Type,
 		functionName: fr.Name,
-		canaryLabel:  fr.CanaryLabel,
+		canaryLabel:  triggerName,
 	}
 
 	// check cache

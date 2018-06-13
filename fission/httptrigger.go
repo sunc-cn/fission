@@ -74,9 +74,6 @@ func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNames
 func htCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
-	// just name triggers by uuid.
-	triggerName := uuid.NewV4().String()
-
 	var functionRef fission.FunctionReference
 	functionList := c.StringSlice("function")
 	functionWeightsList := c.Int64Slice("weight")
@@ -102,7 +99,6 @@ func htCreate(c *cli.Context) error {
 		functionRef = fission.FunctionReference{
 			Type:            fission.FunctionReferenceTypeFunctionWeights,
 			FunctionWeights: functionWeights,
-			CanaryLabel:     triggerName,
 		}
 	}
 
@@ -129,6 +125,9 @@ func htCreate(c *cli.Context) error {
 	}
 
 	host := c.String("host")
+
+	// just name triggers by uuid.
+	triggerName := uuid.NewV4().String()
 
 	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{

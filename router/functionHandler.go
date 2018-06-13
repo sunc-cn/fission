@@ -212,13 +212,15 @@ func (fh *functionHandler) tapService(serviceUrl *url.URL) {
 }
 
 func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
+	log.Println("Inside fh handler")
 	// retrieve url params and add them to request header
 	vars := mux.Vars(request)
 	for k, v := range vars {
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
-	if fh.function == nil {
+	if fh.httpTrigger.Spec.FunctionReference.Type == fission.FunctionReferenceTypeFunctionWeights {
+		log.Printf("fh.function is nil for handler : %+v", *fh)
 		// canary deployment. need to determine the function to send request to now
 		fnMetadata, err := fh.loadBalancer.getFnBackend(fh.httpTrigger, fh.functionMap)
 		if err != nil {
@@ -227,7 +229,11 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 			return
 		}
 		fh.function = fnMetadata
+		log.Printf("chosen fnBackend : %s", fh.function.Name)
+		log.Printf("chosen fnBackend's metadata : %+v", *fh.function)
 	}
+
+	log.Printf("Outside of fh.function == nil comparison")
 
 	// system params
 	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)

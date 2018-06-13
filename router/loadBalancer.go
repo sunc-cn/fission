@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/crd"
@@ -47,9 +48,12 @@ func (lb *LoadBalancer) deleteFunctionBackends(trigger *crd.HTTPTrigger, functio
 func (lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
 	var fnBackends []*FunctionBackend
 
+	log.Printf("Requesting loadbalancer to choose a function backend for url : %s", trigger.Spec.RelativeURL)
+
 	// it's the first time the trigger is being added to cache or trigger has been updated or router restarted.
 	fnBackends = lb.getFunctionBackends(trigger)
 	if len(fnBackends) == 0 {
+		log.Printf("Cache miss for url")
 		fnBackends = make([]*FunctionBackend, 0)
 		for _, v := range functionMap {
 			fnBackend := &FunctionBackend{
@@ -59,6 +63,7 @@ func (lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[s
 			}
 			fnBackends = append(fnBackends, fnBackend)
 		}
+		log.Printf("Request adding fnBackends : %v", fnBackends)
 		lb.addFunctionBackends(trigger, fnBackends)
 	}
 
@@ -77,6 +82,7 @@ func (lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[s
 		bestBackend.currentWeight -= 100
 	}
 
+	log.Printf("Trying to access functionMap[%s] = %+v", bestBackend.name, functionMap[bestBackend.name])
 	return functionMap[bestBackend.name].metadata, nil
 }
 
