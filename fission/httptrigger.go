@@ -17,12 +17,12 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
-	"encoding/json"
 
 	"github.com/satori/go.uuid"
 	"github.com/urfave/cli"
@@ -74,6 +74,9 @@ func checkFunctionExistence(fissionClient *client.Client, fnName string, fnNames
 func htCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
+	// just name triggers by uuid.
+	triggerName := uuid.NewV4().String()
+
 	var functionRef fission.FunctionReference
 	functionList := c.StringSlice("function")
 	functionWeightsList := c.Int64Slice("weight")
@@ -86,7 +89,7 @@ func htCreate(c *cli.Context) error {
 	}
 
 	if len(functionList) == 1 {
-		functionRef = fission.FunctionReference {
+		functionRef = fission.FunctionReference{
 			Type: fission.FunctionReferenceTypeFunctionName,
 			Name: functionList[0],
 		}
@@ -96,9 +99,10 @@ func htCreate(c *cli.Context) error {
 			functionWeights[functionList[index]] = functionWeightsList[index]
 		}
 
-		functionRef = fission.FunctionReference {
-			Type: fission.FunctionReferenceTypeFunctionWeights,
-			FunctionWeights : functionWeights,
+		functionRef = fission.FunctionReference{
+			Type:            fission.FunctionReferenceTypeFunctionWeights,
+			FunctionWeights: functionWeights,
+			CanaryLabel:     triggerName,
 		}
 	}
 
@@ -126,25 +130,22 @@ func htCreate(c *cli.Context) error {
 
 	host := c.String("host")
 
-	// just name triggers by uuid.
-	triggerName := uuid.NewV4().String()
-
 	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
 			Namespace: fnNamespace,
 		},
 		Spec: fission.HTTPTriggerSpec{
-			Host:        host,
-			RelativeURL: triggerUrl,
-			Method:      getMethod(method),
+			Host:              host,
+			RelativeURL:       triggerUrl,
+			Method:            getMethod(method),
 			FunctionReference: functionRef,
-			CreateIngress: createIngress,
+			CreateIngress:     createIngress,
 		},
 	}
 
-	//res2B, _ := json.Marshal(ht)
-	//fmt.Println(string(res2B))
+	res2B, _ := json.Marshal(ht)
+	fmt.Println(string(res2B))
 
 	// if we're writing a spec, don't call the API
 	if c.Bool("spec") {

@@ -45,9 +45,9 @@ type (
 
 	resolveResultType int
 
-	functionMetadata struct{
+	functionMetadata struct {
 		metadata *metav1.ObjectMeta
-		weight int64
+		weight   int64
 	}
 
 	// resolveResult is the result of resolving a function reference; for now
@@ -59,12 +59,18 @@ type (
 		functionMap map[string]functionMetadata
 	}
 
+	// TODO : Change the comments to reflect final design.
+	// had to change this because of the new addition of function -> weights map.
+	// the key of any cache cannot be a map or a slice.
+
 	// namespacedFunctionReference is just a function reference plus a
 	// namespace. Since a function reference works on names, it's only
 	// meaningful within a namespace.
 	namespacedFunctionReference struct {
-		namespace         string
-		functionReference fission.FunctionReference
+		namespace    string
+		refType      fission.FunctionReferenceType
+		functionName string
+		canaryLabel  string
 	}
 )
 
@@ -103,8 +109,10 @@ func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controll
 // more complex.
 func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.FunctionReference) (*resolveResult, error) {
 	nfr := namespacedFunctionReference{
-		namespace:         namespace,
-		functionReference: *fr,
+		namespace:    namespace,
+		refType:      fr.Type,
+		functionName: fr.Name,
+		canaryLabel:  fr.CanaryLabel,
 	}
 
 	// check cache
@@ -123,11 +131,13 @@ func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.Func
 		if err != nil {
 			return nil, err
 		}
+
 	case fission.FunctionReferenceTypeFunctionWeights:
 		rr, err = frr.resolveByFunctionWeights(namespace, fr)
 		if err != nil {
 			return nil, err
 		}
+
 	default:
 		return nil, fmt.Errorf("Unrecognized function reference type %v", fr.Type)
 	}
@@ -162,7 +172,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 
 	rr := resolveResult{
 		resolveResultType: resolveResultSingleFunction,
-		functionMap:  functionMap,
+		functionMap:       functionMap,
 	}
 
 	return &rr, nil
@@ -190,22 +200,24 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 		f := obj.(*crd.Function)
 		functionMap[f.Metadata.Name] = functionMetadata{
 			metadata: &f.Metadata,
-			weight: functionWeight,
+			weight:   functionWeight,
 		}
 
 	}
 
 	rr := resolveResult{
 		resolveResultType: resolveResultMultipleFunctions,
-		functionMap:  functionMap,
+		functionMap:       functionMap,
 	}
 	return &rr, nil
 }
 
-func (frr *functionReferenceResolver) delete(namespace string, fr *fission.FunctionReference) error {
+func (frr *functionReferenceResolver) delete(namespace string, refType fission.FunctionReferenceType, fnName, canaryLabel string) error {
 	nfr := namespacedFunctionReference{
-		namespace:         namespace,
-		functionReference: *fr,
+		namespace:    namespace,
+		refType:      refType,
+		functionName: fnName,
+		canaryLabel:  canaryLabel,
 	}
 	return frr.refCache.Delete(nfr)
 }

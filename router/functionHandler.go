@@ -34,11 +34,11 @@ import (
 )
 
 type functionHandler struct {
-	fmap        *functionServiceMap
-	executor    *executorClient.Client
-	functionMap    map[string]functionMetadata
-	function *metav1.ObjectMeta
-	httpTrigger *crd.HTTPTrigger
+	fmap         *functionServiceMap
+	executor     *executorClient.Client
+	functionMap  map[string]functionMetadata
+	function     *metav1.ObjectMeta
+	httpTrigger  *crd.HTTPTrigger
 	loadBalancer *LoadBalancer
 }
 
@@ -218,16 +218,12 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
-	if len(fh.functionMap) == 1 {
-		// regular function deployment
-		for _, fn := range fh.functionMap {
-			fh.function = fn.metadata
-		}
-	} else {
+	if fh.function == nil {
 		// canary deployment. need to determine the function to send request to now
 		fnMetadata, err := fh.loadBalancer.getFnBackend(fh.httpTrigger, fh.functionMap)
 		if err != nil {
 			log.Printf("Error getting function backend : %v", err)
+			// TODO : write error to responseWrite and return response
 			return
 		}
 		fh.function = fnMetadata

@@ -49,7 +49,7 @@ type HTTPTriggerSet struct {
 	functions         []crd.Function
 	funcStore         k8sCache.Store
 	funcController    k8sCache.Controller
-	loadBalancer 	  *LoadBalancer
+	loadBalancer      *LoadBalancer
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
@@ -61,7 +61,7 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 		kubeClient:         kubeClient,
 		executor:           executor,
 		crdClient:          crdClient,
-		loadBalancer: 		makeLoadBalancer(),
+		loadBalancer:       makeLoadBalancer(),
 	}
 	var tStore, fnStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -122,11 +122,17 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		}
 
 		fh := &functionHandler{
-			fmap:        ts.functionServiceMap,
-			loadBalancer: ts.loadBalancer
-			functionMap:    rr.functionMap,
-			executor:    ts.executor,
-			httpTrigger: &trigger,
+			fmap:         ts.functionServiceMap,
+			loadBalancer: ts.loadBalancer,
+			functionMap:  rr.functionMap,
+			executor:     ts.executor,
+			httpTrigger:  &trigger,
+		}
+
+		if rr.resolveResultType == resolveResultSingleFunction {
+			for _, fn := range fh.functionMap {
+				fh.function = fn.metadata
+			}
 		}
 
 		ht := muxRouter.HandleFunc(trigger.Spec.RelativeURL, fh.handler)
@@ -196,6 +202,16 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 	return store, controller
 }
 
+func needResolverCacheInvalidation(key namespacedFunctionReference, rr resolveResult, fn *metav1.ObjectMeta) bool {
+	if key.refType == fission.FunctionReferenceTypeFunctionWeights &&
+		rr.functionMap[fn.Name].weight != 0 &&
+		rr.functionMap[fn.Name].metadata.ResourceVersion != fn.ResourceVersion {
+		return true
+	}
+
+	return false
+}
+
 func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
 	listWatch := k8sCache.NewListWatchFromClient(ts.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
@@ -209,16 +225,23 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				fn := newObj.(*crd.Function)
+
+				// TODO : We need to make this more efficient. IMO, we do not need to copy the whole cache again.
+				// Need to double check with Soam and ta-ching.
+
 				// update resolver function reference cache
 				for key, rr := range ts.resolver.copy() {
-					// TODO : Also delete function references for resolveByMultipleFunctions
-					// change this.
-					if key.functionReference.Name == fn.Metadata.Name &&
-						rr.functionMetadata.ResourceVersion != fn.Metadata.ResourceVersion {
-						err := ts.resolver.delete(key.namespace, &key.functionReference)
+					if key.refType == fission.FunctionReferenceTypeFunctionName &&
+						key.functionName == fn.Metadata.Name &&
+						key.namespace == fn.Metadata.Namespace &&
+						rr.functionMap[fn.Metadata.Name].metadata.ResourceVersion != fn.Metadata.ResourceVersion ||
+						needResolverCacheInvalidation(key, rr, &fn.Metadata) {
+						// invalidate resolver cache
+						err := ts.resolver.delete(key.namespace, key.refType, key.functionName, key.canaryLabel)
 						if err != nil {
 							log.Printf("Error deleting functionReferenceResolver cache: %v", err)
 						}
+
 						break
 					}
 				}

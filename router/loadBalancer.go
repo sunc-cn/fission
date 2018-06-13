@@ -9,8 +9,8 @@ import (
 )
 
 type FunctionBackend struct {
-	name string
-	weight int64
+	name          string
+	weight        int64
 	currentWeight int64
 }
 
@@ -20,7 +20,7 @@ type LoadBalancer struct {
 
 func makeLoadBalancer() *LoadBalancer {
 	loadBalancer := &LoadBalancer{
-		TriggerFunctionRefMap: make(map[string][]*FunctionBackend,0),
+		TriggerFunctionRefMap: make(map[string][]*FunctionBackend, 0),
 	}
 	return loadBalancer
 }
@@ -29,22 +29,22 @@ func getCacheKey(triggerName string, triggerNamespace string, triggerResourceVer
 	return fmt.Sprintf("%v-%v-%v", triggerName, triggerNamespace, triggerResourceVersion)
 }
 
-func(lb *LoadBalancer) addFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
+func (lb *LoadBalancer) addFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
 	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
 	lb.TriggerFunctionRefMap[key] = functions
 }
 
-func(lb *LoadBalancer) getFunctionBackends(trigger *crd.HTTPTrigger) []*FunctionBackend {
+func (lb *LoadBalancer) getFunctionBackends(trigger *crd.HTTPTrigger) []*FunctionBackend {
 	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
 	return lb.TriggerFunctionRefMap[key]
 }
 
-func(lb *LoadBalancer) deleteFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
+func (lb *LoadBalancer) deleteFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
 	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
 	lb.TriggerFunctionRefMap[key] = nil
 }
 
-func(lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
+func (lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
 	var fnBackends []*FunctionBackend
 
 	// it's the first time the trigger is being added to cache or trigger has been updated or router restarted.
@@ -53,8 +53,8 @@ func(lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[st
 		fnBackends = make([]*FunctionBackend, 0)
 		for _, v := range functionMap {
 			fnBackend := &FunctionBackend{
-				name: v.metadata.Name,
-				weight: v.weight,
+				name:          v.metadata.Name,
+				weight:        v.weight,
 				currentWeight: v.weight,
 			}
 			fnBackends = append(fnBackends, fnBackend)
