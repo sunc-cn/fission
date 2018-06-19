@@ -104,6 +104,12 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 		needExecutor = true
 	}
 
+	dumpResponse := func() {
+		log.Printf("Response status : %v, resp : %+v, err : %v", resp.StatusCode, resp, err)
+	}
+
+	defer dumpResponse()
+
 	for i := 0; i < roundTripper.maxRetries-1; i++ {
 		if needExecutor {
 			log.Printf("Calling getServiceForFunction for function: %s", roundTripper.funcHandler.function.Name)
