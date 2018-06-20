@@ -88,17 +88,17 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	httpMetricLabels := &httpLabels{
 		method: req.Method,
 	}
-	if roundTripper.funcHandler.httpTrigger != nil {
+	//if roundTripper.funcHandler.httpTrigger != nil {
 		httpMetricLabels.host = roundTripper.funcHandler.httpTrigger.Spec.Host
 		httpMetricLabels.path = roundTripper.funcHandler.httpTrigger.Spec.RelativeURL
-	}
+	//}
 
 	// set the timeout for transport context
 	timeout := roundTripper.initialTimeout
 	transport := http.DefaultTransport.(*http.Transport)
 
 	// cache lookup to get serviceUrl
-	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(roundTripper.funcHandler.function)
+	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(&roundTripper.funcHandler.function)
 	if err != nil || serviceUrl == nil {
 		// cache miss or nil entry in cache
 		log.Printf("Setting needExecutor to true for function : %s", roundTripper.funcHandler.function.Name)
@@ -117,7 +117,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 			// send a request to executor to specialize a new pod
 			service, err := roundTripper.funcHandler.executor.GetServiceForFunction(
-				roundTripper.funcHandler.function)
+				&roundTripper.funcHandler.function)
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -132,7 +132,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 
 			// add the address in router's cache
 			log.Printf("assigning serviceUrl : %s for function : %s", service, roundTripper.funcHandler.function.Name)
-			roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
+			roundTripper.funcHandler.fmap.assign(&roundTripper.funcHandler.function, serviceUrl)
 
 			// flag denotes that service was not obtained from cache, instead, created just now by executor
 			serviceUrlFromExecutor = true
@@ -203,7 +203,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			log.Printf("request to %s errored out. removing function : %s from router's cache "+
 				"and requesting a new service for function",
 				req.URL.Host, roundTripper.funcHandler.function.Name)
-			roundTripper.funcHandler.fmap.remove(roundTripper.funcHandler.function)
+			roundTripper.funcHandler.fmap.remove(&roundTripper.funcHandler.function)
 			needExecutor = true
 		}
 	}

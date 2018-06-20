@@ -23,41 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cache"
-	"fmt"
 	"github.com/fission/fission/crd"
 )
-/*
-func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
-	mk := keyFromMetadata(f)
-	item, err := fmap.cache.Get(*mk)
-	if err != nil {
-		return nil, err
-	}
-	u := item.(*url.URL)
-	return u, nil
-}
-
-func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceUrl *url.URL) {
-	mk := keyFromMetadata(f)
-	err, old := fmap.cache.Set(*mk, serviceUrl)
-	if err != nil {
-		log.Printf("Comparing serviceUrl with oldUrl, serviceUrl.Host = %v , oldUrl.Host = %v", serviceUrl.Host, old.(*url.URL).Host)
-		log.Printf("Also dumping serviceUrl obj %+v, old : %+v", *serviceUrl, *(old.(*url.URL)))
-		if *serviceUrl == *(old.(*url.URL)) {
-			return
-		}
-		log.Printf("error caching service url for function with a different value: %v", err)
-		// ignore error
-	}
-}
-
-func (fmap *functionServiceMap) remove(f *metav1.ObjectMeta) error {
-	mk := keyFromMetadata(f)
-	return fmap.cache.Delete(*mk)
-}
-*/
-
-
 
 type FunctionBackend struct {
 	name          string
@@ -71,18 +38,14 @@ type LoadBalancer struct {
 
 func makeLoadBalancer() *LoadBalancer {
 	loadBalancer := &LoadBalancer{
-		FunctionBackendsForUrl: cache.MakeCache(expiry, 0),
+		FunctionBackendsForUrl: cache.MakeCache(0, 0),
 	}
 	return loadBalancer
 }
 
-func getCacheKey(triggerName string, triggerNamespace string, triggerResourceVersion string) string {
-	return fmt.Sprintf("%v-%v-%v", triggerName, triggerNamespace, triggerResourceVersion)
-}
-
 func (lb *LoadBalancer) addFunctionBackends(trigger crd.HTTPTrigger, functions []FunctionBackend) {
 	mk := keyFromMetadata(&trigger.Metadata)
-	err, _ := lb.FunctionBackendsForUrl.Set(*mk, functions)
+	err, _ := lb.FunctionBackendsForUrl.ForceSet(*mk, functions)
 	if err != nil {
 		// TODO: return err and check old value
 		// if *serviceUrl == *(old.(*url.URL)) {
@@ -99,14 +62,15 @@ func (lb *LoadBalancer) getFunctionBackends(trigger crd.HTTPTrigger) (fnBackendL
 	item, err := lb.FunctionBackendsForUrl.Get(*mk)
 	if err != nil {
 		log.Printf("Error: %v getting function backends for trigger url : %v", err, trigger.Spec.RelativeURL, )
-		return fnBackendList, err
+		return
 	}
 
-	fnaBackendList, ok := item.([]FunctionBackend )
+	fnBackendList, ok := item.([]FunctionBackend )
 	if !ok {
 		log.Printf("Error typecasting item to array of FunctionBackend")
+		return
 	}
-	return fnaBackendList, nil
+	return
 }
 
 func (lb *LoadBalancer) deleteFunctionBackends(trigger crd.HTTPTrigger, functions []*FunctionBackend) error{
@@ -124,31 +88,34 @@ func (lb *LoadBalancer) getCanaryBackend(trigger *crd.HTTPTrigger, functionMap m
 	}
 
 	updatedFnBackends := make([]FunctionBackend, 0)
-	var bestBackend *FunctionBackend
+	bestBackend := -1
 
-	for _, backend := range fnBackends {
-
-		backend.currentWeight += backend.weight
-
-		if bestBackend == nil || bestBackend.currentWeight < backend.currentWeight {
-			bestBackend = &backend
-		}
-
+	for index, backend := range fnBackends {
 		fnBackend := FunctionBackend{
 			name:          backend.name,
 			weight:        backend.weight,
-			currentWeight: backend.weight,
+			currentWeight: backend.currentWeight,
+		}
+		fnBackend.currentWeight += fnBackend.weight
+
+		log.Printf("Just appeneded fnBackend : %+v to updatedFnBackends", fnBackend)
+		updatedFnBackends = append(updatedFnBackends, fnBackend)
+
+		if bestBackend == -1 || updatedFnBackends[bestBackend].currentWeight < fnBackend.currentWeight {
+			log.Printf("setting bestBackend : %v", backend.name)
+			bestBackend = index
 		}
 
-		updatedFnBackends = append(updatedFnBackends, fnBackend)
 	}
 
-	if bestBackend != nil {
-		bestBackend.currentWeight -= 100
+	if bestBackend != -1 {
+		updatedFnBackends[bestBackend].currentWeight -= 100
+		log.Printf("final bestBackend's currentWeight : %+v", bestBackend)
 	}
 
+	log.Printf("updatedFnBackends : %+v", updatedFnBackends)
 	lb.addFunctionBackends(*trigger, updatedFnBackends)
 
-	log.Printf("Trying to access functionMap[%s] = %+v", bestBackend.name, functionMap[bestBackend.name])
-	return functionMap[bestBackend.name].metadata, nil
+	log.Printf("Trying to access functionMap[%s] = %+v", updatedFnBackends[bestBackend].name, functionMap[updatedFnBackends[bestBackend].name])
+	return functionMap[updatedFnBackends[bestBackend].name].metadata, nil
 }

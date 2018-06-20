@@ -134,18 +134,22 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 				fh.function = *fn.metadata
 			}
 		} else {
-			// pro-actively initialize load-balancer cache with function weights for each trigger url
-			fnBackends := make([]FunctionBackend, 0)
-			for _, v := range rr.functionMap {
-				fnBackend := FunctionBackend{
-					name:          v.metadata.Name,
-					weight:        v.weight,
-					currentWeight: v.weight,
+			// TODO : check if err is "not found".
+			_, err := ts.loadBalancer.getFunctionBackends(trigger)
+			if err != nil {
+				// pro-actively initialize load-balancer cache with function weights for each trigger url
+				fnBackends := make([]FunctionBackend, 0)
+				for _, v := range rr.functionMap {
+					fnBackend := FunctionBackend{
+						name:          v.metadata.Name,
+						weight:        v.weight,
+						currentWeight: v.weight,
+					}
+					fnBackends = append(fnBackends, fnBackend)
 				}
-				fnBackends = append(fnBackends, fnBackend)
+				log.Printf("adding fnBackends : %v for trigger : %v", fnBackends, trigger.Spec.RelativeURL)
+				ts.loadBalancer.addFunctionBackends(trigger, fnBackends)
 			}
-			log.Printf("adding fnBackends : %v for trigger : %v", fnBackends, trigger.Spec.RelativeURL)
-			ts.loadBalancer.addFunctionBackends(trigger, fnBackends)
 		}
 
 		//log.Printf("Setting up url %s handler %+v", trigger.Spec.RelativeURL, *fh)
