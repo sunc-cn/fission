@@ -106,7 +106,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 	for _, trigger := range ts.triggers {
 
 		// resolve function reference
-		rr, err := ts.resolver.resolve(trigger.Metadata.Namespace, &trigger.Spec.FunctionReference, trigger.Metadata.Name)
+		rr, err := ts.resolver.resolve(trigger)
 		if err != nil {
 			// Unresolvable function reference. Report the error via
 			// the trigger's status.
@@ -126,13 +126,26 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			loadBalancer: ts.loadBalancer,
 			functionMap:  rr.functionMap,
 			executor:     ts.executor,
-			httpTrigger:  &trigger,
+			httpTrigger:  trigger,
 		}
 
 		if rr.resolveResultType == resolveResultSingleFunction {
 			for _, fn := range fh.functionMap {
-				fh.function = fn.metadata
+				fh.function = *fn.metadata
 			}
+		} else {
+			// pro-actively initialize load-balancer cache with function weights for each trigger url
+			fnBackends := make([]FunctionBackend, 0)
+			for _, v := range rr.functionMap {
+				fnBackend := FunctionBackend{
+					name:          v.metadata.Name,
+					weight:        v.weight,
+					currentWeight: v.weight,
+				}
+				fnBackends = append(fnBackends, fnBackend)
+			}
+			log.Printf("adding fnBackends : %v for trigger : %v", fnBackends, trigger.Spec.RelativeURL)
+			ts.loadBalancer.addFunctionBackends(trigger, fnBackends)
 		}
 
 		//log.Printf("Setting up url %s handler %+v", trigger.Spec.RelativeURL, *fh)
@@ -163,7 +176,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		m := function.Metadata
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
-			function: &m,
+			function: m,
 			executor: ts.executor,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
@@ -211,7 +224,7 @@ func needResolverCacheInvalidation(key namespacedFunctionReference, rr resolveRe
 		return true
 	}
 
-	log.Printf("needResolverCacheInvalidation decides to not invalidate the cache")
+	//log.Printf("needResolverCacheInvalidation decides to not invalidate the cache")
 	return false
 }
 
@@ -241,7 +254,7 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 						needResolverCacheInvalidation(key, rr, &fn.Metadata) {
 						// invalidate resolver cache
 						log.Printf("Invalidating resolver cache")
-						err := ts.resolver.delete(key.namespace, key.refType, key.functionName, key.canaryLabel)
+						err := ts.resolver.delete(key.namespace, key.refType, key.functionName, key.triggerName, key.triggerResourceVersion)
 						if err != nil {
 							log.Printf("Error deleting functionReferenceResolver cache: %v", err)
 						}

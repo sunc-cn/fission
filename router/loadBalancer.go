@@ -1,13 +1,63 @@
+
+/*
+Copyright 2016 The Fission Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package router
 
 import (
-	"fmt"
+	"log"
 
-	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fission/fission/cache"
+	"fmt"
 	"github.com/fission/fission/crd"
 )
+/*
+func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
+	mk := keyFromMetadata(f)
+	item, err := fmap.cache.Get(*mk)
+	if err != nil {
+		return nil, err
+	}
+	u := item.(*url.URL)
+	return u, nil
+}
+
+func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceUrl *url.URL) {
+	mk := keyFromMetadata(f)
+	err, old := fmap.cache.Set(*mk, serviceUrl)
+	if err != nil {
+		log.Printf("Comparing serviceUrl with oldUrl, serviceUrl.Host = %v , oldUrl.Host = %v", serviceUrl.Host, old.(*url.URL).Host)
+		log.Printf("Also dumping serviceUrl obj %+v, old : %+v", *serviceUrl, *(old.(*url.URL)))
+		if *serviceUrl == *(old.(*url.URL)) {
+			return
+		}
+		log.Printf("error caching service url for function with a different value: %v", err)
+		// ignore error
+	}
+}
+
+func (fmap *functionServiceMap) remove(f *metav1.ObjectMeta) error {
+	mk := keyFromMetadata(f)
+	return fmap.cache.Delete(*mk)
+}
+*/
+
+
 
 type FunctionBackend struct {
 	name          string
@@ -16,12 +66,12 @@ type FunctionBackend struct {
 }
 
 type LoadBalancer struct {
-	TriggerFunctionRefMap map[string][]*FunctionBackend // trigger -> functions along with their weights
+	FunctionBackendsForUrl *cache.Cache // trigger -> functions along with their weights
 }
 
 func makeLoadBalancer() *LoadBalancer {
 	loadBalancer := &LoadBalancer{
-		TriggerFunctionRefMap: make(map[string][]*FunctionBackend, 0),
+		FunctionBackendsForUrl: cache.MakeCache(expiry, 0),
 	}
 	return loadBalancer
 }
@@ -30,72 +80,75 @@ func getCacheKey(triggerName string, triggerNamespace string, triggerResourceVer
 	return fmt.Sprintf("%v-%v-%v", triggerName, triggerNamespace, triggerResourceVersion)
 }
 
-func (lb *LoadBalancer) addFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
-	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
-	lb.TriggerFunctionRefMap[key] = functions
+func (lb *LoadBalancer) addFunctionBackends(trigger crd.HTTPTrigger, functions []FunctionBackend) {
+	mk := keyFromMetadata(&trigger.Metadata)
+	err, _ := lb.FunctionBackendsForUrl.Set(*mk, functions)
+	if err != nil {
+		// TODO: return err and check old value
+		// if *serviceUrl == *(old.(*url.URL)) {
+		//	return
+		//}
+
+		// ignore error
+		log.Printf("error: %v caching function backends for url : %v", err, trigger.Spec.RelativeURL)
+	}
 }
 
-func (lb *LoadBalancer) getFunctionBackends(trigger *crd.HTTPTrigger) []*FunctionBackend {
-	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
-	return lb.TriggerFunctionRefMap[key]
-}
-
-func (lb *LoadBalancer) deleteFunctionBackends(trigger *crd.HTTPTrigger, functions []*FunctionBackend) {
-	key := getCacheKey(trigger.Metadata.Name, trigger.Metadata.Namespace, trigger.Metadata.ResourceVersion)
-	lb.TriggerFunctionRefMap[key] = nil
-}
-
-func (lb *LoadBalancer) getFnBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
-	var fnBackends []*FunctionBackend
-
-	log.Printf("Requesting loadbalancer to choose a function backend for url : %s", trigger.Spec.RelativeURL)
-
-	// it's the first time the trigger is being added to cache or trigger has been updated or router restarted.
-	fnBackends = lb.getFunctionBackends(trigger)
-	if len(fnBackends) == 0 {
-		log.Printf("Cache miss for url")
-		fnBackends = make([]*FunctionBackend, 0)
-		for _, v := range functionMap {
-			fnBackend := &FunctionBackend{
-				name:          v.metadata.Name,
-				weight:        v.weight,
-				currentWeight: v.weight,
-			}
-			fnBackends = append(fnBackends, fnBackend)
-		}
-		log.Printf("Request adding fnBackends : %v", fnBackends)
-		lb.addFunctionBackends(trigger, fnBackends)
+func (lb *LoadBalancer) getFunctionBackends(trigger crd.HTTPTrigger) (fnBackendList []FunctionBackend, err error) {
+	mk := keyFromMetadata(&trigger.Metadata)
+	item, err := lb.FunctionBackendsForUrl.Get(*mk)
+	if err != nil {
+		log.Printf("Error: %v getting function backends for trigger url : %v", err, trigger.Spec.RelativeURL, )
+		return fnBackendList, err
 	}
 
+	fnaBackendList, ok := item.([]FunctionBackend )
+	if !ok {
+		log.Printf("Error typecasting item to array of FunctionBackend")
+	}
+	return fnaBackendList, nil
+}
+
+func (lb *LoadBalancer) deleteFunctionBackends(trigger crd.HTTPTrigger, functions []*FunctionBackend) error{
+	mk := keyFromMetadata(&trigger.Metadata)
+	return lb.FunctionBackendsForUrl.Delete(*mk)
+}
+
+func (lb *LoadBalancer) getCanaryBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
+	log.Printf("Requesting loadbalancer to choose a function backend for url : %s", trigger.Spec.RelativeURL)
+
+	fnBackends, err := lb.getFunctionBackends(*trigger)
+	if err != nil {
+		log.Printf("Error getting function backends for url : %v", trigger.Spec.RelativeURL)
+		return  nil, err
+	}
+
+	updatedFnBackends := make([]FunctionBackend, 0)
 	var bestBackend *FunctionBackend
+
 	for _, backend := range fnBackends {
 
 		backend.currentWeight += backend.weight
 
 		if bestBackend == nil || bestBackend.currentWeight < backend.currentWeight {
-			bestBackend = backend
-			fmt.Printf("bestBackend: %s\n", backend.name)
+			bestBackend = &backend
 		}
+
+		fnBackend := FunctionBackend{
+			name:          backend.name,
+			weight:        backend.weight,
+			currentWeight: backend.weight,
+		}
+
+		updatedFnBackends = append(updatedFnBackends, fnBackend)
 	}
 
 	if bestBackend != nil {
 		bestBackend.currentWeight -= 100
 	}
 
+	lb.addFunctionBackends(*trigger, updatedFnBackends)
+
 	log.Printf("Trying to access functionMap[%s] = %+v", bestBackend.name, functionMap[bestBackend.name])
 	return functionMap[bestBackend.name].metadata, nil
 }
-
-/*
-func(lb *LoadBalancer) DumpServers() {
-	fmt.Printf("Printing server info\n")
-
-	for k, v := range lb.Servers {
-		fmt.Printf("Server : %s\n", k)
-		fmt.Printf("Contents : %v\n", *v)
-		fmt.Printf("\n\n")
-	}
-
-	fmt.Printf("***********************************\n")
-}
-*/

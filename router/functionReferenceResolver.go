@@ -70,7 +70,8 @@ type (
 		namespace    string
 		refType      fission.FunctionReferenceType
 		functionName string
-		canaryLabel  string
+		triggerName  string
+		triggerResourceVersion string
 	}
 )
 
@@ -102,17 +103,14 @@ func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controll
 		k8sCache.ResourceEventHandlerFuncs{})
 }
 
-// resolve translates a namespace and a function reference to resolveResult.
-// The resolveResult for now is just a function's metadata. In the future, some
-// function ref types may resolve to two functions rather than just one
-// (e.g. for incremental deployment), which will make the resolveResult a bit
-// more complex.
-func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.FunctionReference, triggerName string) (*resolveResult, error) {
+// resolve translates a trigger's function reference to a resolveResult.
+func (frr *functionReferenceResolver) resolve(trigger crd.HTTPTrigger) (*resolveResult, error) {
 	nfr := namespacedFunctionReference{
-		namespace:    namespace,
-		refType:      fr.Type,
-		functionName: fr.Name,
-		canaryLabel:  triggerName,
+		namespace:    trigger.Metadata.Namespace,
+		refType:      trigger.Spec.FunctionReference.Type,
+		functionName: trigger.Spec.FunctionReference.Name,
+		triggerName:  trigger.Metadata.Name,
+		triggerResourceVersion: trigger.Metadata.ResourceVersion,
 	}
 
 	// check cache
@@ -125,21 +123,21 @@ func (frr *functionReferenceResolver) resolve(namespace string, fr *fission.Func
 	// resolve on cache miss
 	var rr *resolveResult
 
-	switch fr.Type {
+	switch trigger.Spec.FunctionReference.Type {
 	case fission.FunctionReferenceTypeFunctionName:
-		rr, err = frr.resolveByName(namespace, fr.Name)
+		rr, err = frr.resolveByName(nfr.namespace, nfr.functionName)
 		if err != nil {
 			return nil, err
 		}
 
 	case fission.FunctionReferenceTypeFunctionWeights:
-		rr, err = frr.resolveByFunctionWeights(namespace, fr)
+		rr, err = frr.resolveByFunctionWeights(nfr.namespace, &trigger.Spec.FunctionReference)
 		if err != nil {
 			return nil, err
 		}
 
 	default:
-		return nil, fmt.Errorf("Unrecognized function reference type %v", fr.Type)
+		return nil, fmt.Errorf("Unrecognized function reference type %v", nfr.refType)
 	}
 
 	// cache resolve result
@@ -212,12 +210,13 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 	return &rr, nil
 }
 
-func (frr *functionReferenceResolver) delete(namespace string, refType fission.FunctionReferenceType, fnName, canaryLabel string) error {
+func (frr *functionReferenceResolver) delete(namespace string, refType fission.FunctionReferenceType, fnName, triggerName, triggerRV string) error {
 	nfr := namespacedFunctionReference{
 		namespace:    namespace,
 		refType:      refType,
 		functionName: fnName,
-		canaryLabel:  canaryLabel,
+		triggerName:  triggerName,
+		triggerResourceVersion: triggerRV,
 	}
 	return frr.refCache.Delete(nfr)
 }

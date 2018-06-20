@@ -37,8 +37,8 @@ type functionHandler struct {
 	fmap         *functionServiceMap
 	executor     *executorClient.Client
 	functionMap  map[string]functionMetadata
-	function     *metav1.ObjectMeta
-	httpTrigger  *crd.HTTPTrigger
+	function     metav1.ObjectMeta
+	httpTrigger  crd.HTTPTrigger
 	loadBalancer *LoadBalancer
 }
 
@@ -101,6 +101,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 	serviceUrl, err = roundTripper.funcHandler.fmap.lookup(roundTripper.funcHandler.function)
 	if err != nil || serviceUrl == nil {
 		// cache miss or nil entry in cache
+		log.Printf("Setting needExecutor to true for function : %s", roundTripper.funcHandler.function.Name)
 		needExecutor = true
 	}
 
@@ -130,6 +131,7 @@ func (roundTripper RetryingRoundTripper) RoundTrip(req *http.Request) (resp *htt
 			}
 
 			// add the address in router's cache
+			log.Printf("assigning serviceUrl : %s for function : %s", service, roundTripper.funcHandler.function.Name)
 			roundTripper.funcHandler.fmap.assign(roundTripper.funcHandler.function, serviceUrl)
 
 			// flag denotes that service was not obtained from cache, instead, created just now by executor
@@ -225,24 +227,26 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 		request.Header.Add(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}
 
+	log.Printf("fh http fr type : %v, triggerName : %v", fh.httpTrigger.Spec.FunctionReference.Type, fh.httpTrigger.Metadata.Name)
+
 	if fh.httpTrigger.Spec.FunctionReference.Type == fission.FunctionReferenceTypeFunctionWeights {
 		log.Printf("fh.function is nil for handler : %+v", *fh)
 		// canary deployment. need to determine the function to send request to now
-		fnMetadata, err := fh.loadBalancer.getFnBackend(fh.httpTrigger, fh.functionMap)
+		fnMetadata, err := fh.loadBalancer.getCanaryBackend(&fh.httpTrigger, fh.functionMap)
 		if err != nil {
 			log.Printf("Error getting function backend : %v", err)
 			// TODO : write error to responseWrite and return response
 			return
 		}
-		fh.function = fnMetadata
+		fh.function = *fnMetadata
 		log.Printf("chosen fnBackend : %s", fh.function.Name)
-		log.Printf("chosen fnBackend's metadata : %+v", *fh.function)
+		log.Printf("chosen fnBackend's metadata : %+v", fh.function)
 	}
 
 	log.Printf("Outside of fh.function == nil comparison")
 
 	// system params
-	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
+	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, &fh.function, request)
 
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
