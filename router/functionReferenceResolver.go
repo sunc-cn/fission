@@ -45,9 +45,10 @@ type (
 
 	resolveResultType int
 
-	functionMetadata struct {
-		metadata *metav1.ObjectMeta
-		weight   int64
+	FunctionWeightDistribution struct {
+		name string
+		weight int
+		sumPrefix int
 	}
 
 	// resolveResult is the result of resolving a function reference; for now
@@ -56,7 +57,8 @@ type (
 	resolveResult struct {
 		resolveResultType
 		//functionMetadata *metav1.ObjectMeta
-		functionMap map[string]functionMetadata
+		functionMetadataMap map[string]*metav1.ObjectMeta
+		functionWtDistributionList []FunctionWeightDistribution
 	}
 
 	// TODO : Change the comments to reflect final design.
@@ -107,8 +109,6 @@ func makeK8SCache(crdClient *rest.RESTClient) (k8sCache.Store, k8sCache.Controll
 func (frr *functionReferenceResolver) resolve(trigger crd.HTTPTrigger) (*resolveResult, error) {
 	nfr := namespacedFunctionReference{
 		namespace:    trigger.Metadata.Namespace,
-		refType:      trigger.Spec.FunctionReference.Type,
-		functionName: trigger.Spec.FunctionReference.Name,
 		triggerName:  trigger.Metadata.Name,
 		triggerResourceVersion: trigger.Metadata.ResourceVersion,
 	}
@@ -163,14 +163,12 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	}
 
 	f := obj.(*crd.Function)
-	functionMap := make(map[string]functionMetadata, 0)
-	functionMap[f.Metadata.Name] = functionMetadata{
-		metadata: &f.Metadata,
-	}
+	functionMetadataMap := make(map[string]*metav1.ObjectMeta, 1)
+	functionMetadataMap[f.Metadata.Name] = &f.Metadata
 
 	rr := resolveResult{
 		resolveResultType: resolveResultSingleFunction,
-		functionMap:       functionMap,
+		functionMetadataMap:       functionMetadataMap,
 	}
 
 	return &rr, nil
@@ -178,7 +176,9 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 
 func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string, fr *fission.FunctionReference) (*resolveResult, error) {
 
-	functionMap := make(map[string]functionMetadata, 0)
+	functionMetadataMap := make(map[string]*metav1.ObjectMeta, 0)
+	fnWtDistrList := make([]FunctionWeightDistribution, 0)
+	sumPrefix := 0
 
 	for functionName, functionWeight := range fr.FunctionWeights {
 		// get function from cache
@@ -196,17 +196,22 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 		}
 
 		f := obj.(*crd.Function)
-		functionMap[f.Metadata.Name] = functionMetadata{
-			metadata: &f.Metadata,
-			weight:   functionWeight,
-		}
+		functionMetadataMap[f.Metadata.Name] = &f.Metadata
+		sumPrefix = sumPrefix + functionWeight
+		fnWtDistrList = append(fnWtDistrList, FunctionWeightDistribution{
+			name:functionName,
+			weight: functionWeight,
+			sumPrefix: sumPrefix,
+		})
 
 	}
 
 	rr := resolveResult{
 		resolveResultType: resolveResultMultipleFunctions,
-		functionMap:       functionMap,
+		functionMetadataMap:       functionMetadataMap,
+		functionWtDistributionList: fnWtDistrList,
 	}
+
 	return &rr, nil
 }
 

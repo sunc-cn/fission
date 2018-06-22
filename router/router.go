@@ -98,6 +98,8 @@ func Start(port int, executorUrl string) {
 
 	executor := executorClient.MakeClient(executorUrl)
 
+	setupCanaryLoadBalancer()
+
 	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, kubeClient, executor, restClient)
 	resolver := makeFunctionReferenceResolver(fnStore)
 

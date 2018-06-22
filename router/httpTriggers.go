@@ -49,7 +49,6 @@ type HTTPTriggerSet struct {
 	functions         []crd.Function
 	funcStore         k8sCache.Store
 	funcController    k8sCache.Controller
-	loadBalancer      *LoadBalancer
 }
 
 func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClient,
@@ -61,7 +60,6 @@ func makeHTTPTriggerSet(fmap *functionServiceMap, fissionClient *crd.FissionClie
 		kubeClient:         kubeClient,
 		executor:           executor,
 		crdClient:          crdClient,
-		loadBalancer:       makeLoadBalancer(),
 	}
 	var tStore, fnStore k8sCache.Store
 	var tController, fnController k8sCache.Controller
@@ -121,34 +119,17 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			log.Panicf("resolve result type not implemented (%v)", rr.resolveResultType)
 		}
 
-		fh := &functionHandler{
+		fh := functionHandler{
 			fmap:         ts.functionServiceMap,
-			loadBalancer: ts.loadBalancer,
-			functionMap:  rr.functionMap,
+			functionMetadataMap:  rr.functionMetadataMap,
+			fnWeightDistributionList: rr.functionWtDistributionList,
 			executor:     ts.executor,
-			httpTrigger:  trigger,
+			httpTrigger:  &trigger,
 		}
 
 		if rr.resolveResultType == resolveResultSingleFunction {
-			for _, fn := range fh.functionMap {
-				fh.function = *fn.metadata
-			}
-		} else {
-			// TODO : check if err is "not found".
-			_, err := ts.loadBalancer.getFunctionBackends(trigger)
-			if err != nil {
-				// pro-actively initialize load-balancer cache with function weights for each trigger url
-				fnBackends := make([]FunctionBackend, 0)
-				for _, v := range rr.functionMap {
-					fnBackend := FunctionBackend{
-						name:          v.metadata.Name,
-						weight:        v.weight,
-						currentWeight: v.weight,
-					}
-					fnBackends = append(fnBackends, fnBackend)
-				}
-				log.Printf("adding fnBackends : %v for trigger : %v", fnBackends, trigger.Spec.RelativeURL)
-				ts.loadBalancer.addFunctionBackends(trigger, fnBackends)
+			for _, metadata := range fh.functionMetadataMap {
+				fh.function = metadata
 			}
 		}
 
@@ -180,7 +161,7 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 		m := function.Metadata
 		fh := &functionHandler{
 			fmap:     ts.functionServiceMap,
-			function: m,
+			function: &m,
 			executor: ts.executor,
 		}
 		muxRouter.HandleFunc(fission.UrlForFunction(function.Metadata.Name, function.Metadata.Namespace), fh.handler)
@@ -221,16 +202,16 @@ func (ts *HTTPTriggerSet) initTriggerController() (k8sCache.Store, k8sCache.Cont
 	return store, controller
 }
 
-func needResolverCacheInvalidation(key namespacedFunctionReference, rr resolveResult, fn *metav1.ObjectMeta) bool {
-	if key.refType == fission.FunctionReferenceTypeFunctionWeights &&
-		rr.functionMap[fn.Name].weight != 0 &&
-		rr.functionMap[fn.Name].metadata.ResourceVersion != fn.ResourceVersion {
-		return true
-	}
-
-	//log.Printf("needResolverCacheInvalidation decides to not invalidate the cache")
-	return false
-}
+//func needResolverCacheInvalidation(key namespacedFunctionReference, rr resolveResult, fn *metav1.ObjectMeta) bool {
+//	if key.refType == fission.FunctionReferenceTypeFunctionWeights &&
+//		rr.functionMap[fn.Name].weight != 0 &&
+//		rr.functionMap[fn.Name].metadata.ResourceVersion != fn.ResourceVersion {
+//		return true
+//	}
+//
+//	//log.Printf("needResolverCacheInvalidation decides to not invalidate the cache")
+//	return false
+//}
 
 func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
@@ -254,8 +235,8 @@ func (ts *HTTPTriggerSet) initFunctionController() (k8sCache.Store, k8sCache.Con
 					if key.refType == fission.FunctionReferenceTypeFunctionName &&
 						key.functionName == fn.Metadata.Name &&
 						key.namespace == fn.Metadata.Namespace &&
-						rr.functionMap[fn.Metadata.Name].metadata.ResourceVersion != fn.Metadata.ResourceVersion ||
-						needResolverCacheInvalidation(key, rr, &fn.Metadata) {
+						rr.functionMetadataMap[fn.Metadata.Name].ResourceVersion != fn.Metadata.ResourceVersion {
+						//needResolverCacheInvalidation(key, rr, &fn.Metadata) {
 						// invalidate resolver cache
 						log.Printf("Invalidating resolver cache")
 						err := ts.resolver.delete(key.namespace, key.refType, key.functionName, key.triggerName, key.triggerResourceVersion)

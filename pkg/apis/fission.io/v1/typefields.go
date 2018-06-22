@@ -188,7 +188,7 @@ type (
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value.
-		FunctionWeights map[string]int64 `json:"functionweights"`
+		FunctionWeights map[string]int `json:"functionweights"`
 	}
 
 	//

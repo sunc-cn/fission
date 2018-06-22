@@ -19,103 +19,45 @@ package router
 
 import (
 	"log"
+	"math/rand"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/fission/fission/cache"
-	"github.com/fission/fission/crd"
 )
 
-type FunctionBackend struct {
-	name          string
-	weight        int64
-	currentWeight int64
+func setupCanaryLoadBalancer() {
+	// just seeding the random number
+	rand.Seed(time.Now().UnixNano())
 }
 
-type LoadBalancer struct {
-	FunctionBackendsForUrl *cache.Cache // trigger -> functions along with their weights
-}
-
-func makeLoadBalancer() *LoadBalancer {
-	loadBalancer := &LoadBalancer{
-		FunctionBackendsForUrl: cache.MakeCache(0, 0),
-	}
-	return loadBalancer
-}
-
-func (lb *LoadBalancer) addFunctionBackends(trigger crd.HTTPTrigger, functions []FunctionBackend) {
-	mk := keyFromMetadata(&trigger.Metadata)
-	err, _ := lb.FunctionBackendsForUrl.ForceSet(*mk, functions)
-	if err != nil {
-		// TODO: return err and check old value
-		// if *serviceUrl == *(old.(*url.URL)) {
-		//	return
-		//}
-
-		// ignore error
-		log.Printf("error: %v caching function backends for url : %v", err, trigger.Spec.RelativeURL)
-	}
-}
-
-func (lb *LoadBalancer) getFunctionBackends(trigger crd.HTTPTrigger) (fnBackendList []FunctionBackend, err error) {
-	mk := keyFromMetadata(&trigger.Metadata)
-	item, err := lb.FunctionBackendsForUrl.Get(*mk)
-	if err != nil {
-		log.Printf("Error: %v getting function backends for trigger url : %v", err, trigger.Spec.RelativeURL, )
-		return
-	}
-
-	fnBackendList, ok := item.([]FunctionBackend )
-	if !ok {
-		log.Printf("Error typecasting item to array of FunctionBackend")
-		return
-	}
-	return
-}
-
-func (lb *LoadBalancer) deleteFunctionBackends(trigger crd.HTTPTrigger, functions []*FunctionBackend) error{
-	mk := keyFromMetadata(&trigger.Metadata)
-	return lb.FunctionBackendsForUrl.Delete(*mk)
-}
-
-func (lb *LoadBalancer) getCanaryBackend(trigger *crd.HTTPTrigger, functionMap map[string]functionMetadata) (*metav1.ObjectMeta, error) {
-	log.Printf("Requesting loadbalancer to choose a function backend for url : %s", trigger.Spec.RelativeURL)
-
-	fnBackends, err := lb.getFunctionBackends(*trigger)
-	if err != nil {
-		log.Printf("Error getting function backends for url : %v", trigger.Spec.RelativeURL)
-		return  nil, err
-	}
-
-	updatedFnBackends := make([]FunctionBackend, 0)
-	bestBackend := -1
-
-	for index, backend := range fnBackends {
-		fnBackend := FunctionBackend{
-			name:          backend.name,
-			weight:        backend.weight,
-			currentWeight: backend.currentWeight,
-		}
-		fnBackend.currentWeight += fnBackend.weight
-
-		log.Printf("Just appeneded fnBackend : %+v to updatedFnBackends", fnBackend)
-		updatedFnBackends = append(updatedFnBackends, fnBackend)
-
-		if bestBackend == -1 || updatedFnBackends[bestBackend].currentWeight < fnBackend.currentWeight {
-			log.Printf("setting bestBackend : %v", backend.name)
-			bestBackend = index
+func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string{
+	low := wtDistrList[0].sumPrefix
+	high := wtDistrList[len(wtDistrList)].sumPrefix
+	for {
+		mid := low + high / 2
+		if randomNumber > wtDistrList[mid].sumPrefix {
+			high = mid
+		} else {
+			low = mid + 1
 		}
 
+		if low > high {
+			break
+		}
 	}
 
-	if bestBackend != -1 {
-		updatedFnBackends[bestBackend].currentWeight -= 100
-		log.Printf("final bestBackend's currentWeight : %+v", bestBackend)
+	if wtDistrList[low].sumPrefix >= randomNumber {
+		return wtDistrList[low].name
+	} else {
+		return ""
 	}
+}
 
-	log.Printf("updatedFnBackends : %+v", updatedFnBackends)
-	lb.addFunctionBackends(*trigger, updatedFnBackends)
+func getCanaryBackend(fnMetadatamap map[string]*metav1.ObjectMeta, fnWtDistributionList []FunctionWeightDistribution) *metav1.ObjectMeta{
+	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)].sumPrefix + 1)
+	fnName := findCeil(randomNumber,fnWtDistributionList)
 
-	log.Printf("Trying to access functionMap[%s] = %+v", updatedFnBackends[bestBackend].name, functionMap[updatedFnBackends[bestBackend].name])
-	return functionMap[updatedFnBackends[bestBackend].name].metadata, nil
+	log.Printf("chosen function : %s", fnName)
+
+	return fnMetadatamap[fnName]
 }
