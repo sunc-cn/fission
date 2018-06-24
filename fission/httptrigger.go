@@ -76,7 +76,7 @@ func htCreate(c *cli.Context) error {
 
 	var functionRef fission.FunctionReference
 	functionList := c.StringSlice("function")
-	functionWeightsList := c.Int64Slice("weight")
+	functionWeightsList := c.IntSlice("weight")
 
 	fmt.Printf("fn array : %v", functionList)
 	fmt.Printf("weight array : %v", functionWeightsList)
@@ -91,7 +91,7 @@ func htCreate(c *cli.Context) error {
 			Name: functionList[0],
 		}
 	} else {
-		functionWeights := make(map[string]int64, 0)
+		functionWeights := make(map[string]int, 0)
 		for index := range functionList {
 			functionWeights[functionList[index]] = functionWeightsList[index]
 		}

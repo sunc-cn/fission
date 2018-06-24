@@ -31,22 +31,30 @@ func setupCanaryLoadBalancer() {
 }
 
 func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string{
-	low := wtDistrList[0].sumPrefix
-	high := wtDistrList[len(wtDistrList)].sumPrefix
+	low := 0
+	high := len(wtDistrList) - 1
+
 	for {
-		mid := low + high / 2
-		if randomNumber > wtDistrList[mid].sumPrefix {
-			high = mid
-		} else {
-			low = mid + 1
+		if low >= high {
+			break
 		}
 
-		if low > high {
-			break
+		mid := low + high / 2
+		log.Printf("mid : %d", mid)
+		if randomNumber >= wtDistrList[mid].sumPrefix {
+			low = mid + 1
+			log.Printf("low %d", low)
+			log.Printf("randomNumber %d > wtDistrList[mid].sumPrefix %d", randomNumber, wtDistrList[mid].sumPrefix)
+
+		} else {
+			log.Printf("randomNumber %d < wtDistrList[mid].sumPrefix %d", randomNumber, wtDistrList[mid].sumPrefix)
+			high = mid
+			log.Printf("high %d", high)
 		}
 	}
 
 	if wtDistrList[low].sumPrefix >= randomNumber {
+		log.Printf("Final low index : %d, returning fnName : %s", low, wtDistrList[low].name)
 		return wtDistrList[low].name
 	} else {
 		return ""
@@ -54,7 +62,12 @@ func findCeil(randomNumber int, wtDistrList []FunctionWeightDistribution) string
 }
 
 func getCanaryBackend(fnMetadatamap map[string]*metav1.ObjectMeta, fnWtDistributionList []FunctionWeightDistribution) *metav1.ObjectMeta{
-	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)].sumPrefix + 1)
+
+	log.Printf("Dumping fnMetadataMap : %+v, fnWtDistrList : %v", fnMetadatamap, fnWtDistributionList)
+
+	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)-1].sumPrefix + 1)
+
+	log.Printf("randomNumber : %d", randomNumber)
 	fnName := findCeil(randomNumber,fnWtDistributionList)
 
 	log.Printf("chosen function : %s", fnName)

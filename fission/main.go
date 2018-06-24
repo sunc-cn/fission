@@ -151,7 +151,7 @@ func main() {
 	htHostFlag := cli.StringFlag{Name: "host", Usage: "FQDN of the network host for route"}
 	htIngressFlag := cli.BoolFlag{Name: "createingress", Usage: "Creates ingress with same URL, defaults to false"}
 	htFnNameFlag := cli.StringSliceFlag{Name: "function", Usage: "Function name. Multiple functions can be supplied by reusing this flag multiple times for canary deployment"}
-	htFnWeightFlag := cli.Int64SliceFlag{Name: "weight", Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
+	htFnWeightFlag := cli.IntSliceFlag{Name: "weight", Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
 
 	htSubcommands := []cli.Command{
 

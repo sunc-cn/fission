@@ -127,6 +127,8 @@ func (ts *HTTPTriggerSet) getRouter() *mux.Router {
 			httpTrigger:  &trigger,
 		}
 
+		log.Printf("Dumping fh object : %+v", fh)
+
 		if rr.resolveResultType == resolveResultSingleFunction {
 			for _, metadata := range fh.functionMetadataMap {
 				fh.function = metadata
