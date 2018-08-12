@@ -284,6 +284,7 @@ func main() {
 
 	// canary configs
 	canaryConfigNameFlag := cli.StringFlag{Name: "name", Usage: "CanaryConfig name"}
+	canaryConfigNamespaceFlag := cli.StringFlag{Name: "namespace", Usage: "CanaryConfig namespace"}
 	triggerNameFlag := cli.StringFlag{Name: "trigger", Usage: "http trigger that this config references"}
 	funcNFlag := cli.StringFlag{Name: "funcN", Usage: "new version of the function"}
 	funcNminus1Flag := cli.StringFlag{Name: "funcN-1", Usage: "old stable version of the function"}
@@ -291,7 +292,7 @@ func main() {
 	incrementIntervalFlag := cli.StringFlag{Name: "increment-interval", Usage: "weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d"}
 	failureThresholdFlag := cli.IntFlag{Name: "failure-threshold", Usage: "threshold in percentage beyond which the new version of the function is considered unstable"}
 	canarySubCommands := []cli.Command{
-		{Name: "create", Usage: "create a canary config", Flags: []cli.Flag{canaryConfigNameFlag, triggerNameFlag, funcNFlag, funcNminus1Flag, weightIncrementFlag, incrementIntervalFlag, failureThresholdFlag}, Action: canaryConfigCreate},
+		{Name: "create", Usage: "create a canary config", Flags: []cli.Flag{canaryConfigNameFlag, canaryConfigNamespaceFlag, triggerNameFlag, funcNFlag, funcNminus1Flag, weightIncrementFlag, incrementIntervalFlag, failureThresholdFlag}, Action: canaryConfigCreate},
 		{Name: "get", Usage: "view parameters in a canary config", Flags: []cli.Flag{canaryConfigNameFlag}, Action: canaryConfigGet},
 	}
 

@@ -26,28 +26,21 @@ import (
 
 	"github.com/fission/fission"
 	"github.com/fission/fission/crd"
+	"github.com/fission/fission/fission/log"
 )
 
 func canaryConfigCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
 	canaryConfigName := c.String("name")
+	ns := c.String("namespace")
 	if len(canaryConfigName) == 0 {
-		fatal("Need a name, use --name.")
+		log.Fatal("Need a name, use --name.")
 	}
 
-	// TODO : Allow namespace
-	ns := "default"
-
-	//m := &metav1.ObjectMeta{
-	//	Name:      canaryConfigName,
-	//	Namespace: ns,
-	//}
-
-	//canaryCfg, err := client.CanaryConfigGet(m)
-	//if  canaryCfg != nil {
-	//	checkErr(fmt.Errorf("duplicate canary config"), "Another canary config with the same name exists")
-	//}
+	if len(ns) == 0 {
+		 ns = "default"
+	}
 
 	trigger := c.String("trigger")
 	funcN := c.String("funcN")
@@ -59,16 +52,37 @@ func canaryConfigCreate(c *cli.Context) error {
 
 	// TODO : Validation check for time parsing
 
-	canaryCfg := &crd.CanaryConfig{
-		Metadata: metav1.ObjectMeta{
+	// check that the trigger exists in the same namespace:
+	m := &metav1.ObjectMeta {
+		Name:      trigger,
+		Namespace: ns,
+	}
+
+	htTrigger, err := client.HTTPTriggerGet(m)
+	if htTrigger != nil {
+		checkErr(err, "get a http trigger")
+	}
+
+	// check that the trigger has function reference type function weights
+	if htTrigger.Spec.FunctionReference.Type != fission.FunctionReferenceTypeFunctionWeights {
+		log.Fatal("Canary config cannot be created for http triggers that do not reference functions by weights")
+	}
+
+	// check that the trigger references same functions in the function weights
+
+	weight, ok := htTrigger.Spec.FunctionReference.FunctionWeights[funcN]
+	if !ok {
+
+	}
+
+
+	canaryCfg := &crd.CanaryConfig {
+		Metadata: metav1.ObjectMeta {
 			Name:      canaryConfigName,
 			Namespace: ns,
 		},
-		Spec: fission.CanaryConfigSpec{
-			Trigger: fission.TriggerReference {
-				Name: trigger,
-				Namespace: ns,
-			},
+		Spec: fission.CanaryConfigSpec {
+			Trigger: trigger,
 			FunctionN: funcN,
 			FunctionNminus1: funcNminus1,
 			WeightIncrement: incrementStep,
@@ -78,7 +92,7 @@ func canaryConfigCreate(c *cli.Context) error {
 		},
 	}
 
-	_, err := client.CanaryConfigCreate(canaryCfg)
+	_, err = client.CanaryConfigCreate(canaryCfg)
 	checkErr(err, "create canary config")
 
 	fmt.Printf("canary config '%v' created\n", canaryConfigName)
